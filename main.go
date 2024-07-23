@@ -13,55 +13,101 @@ import (
 	"golang.org/x/text/message"
 )
 
-func handleMessage(input Message) (Message, error) {
-	if !strings.HasPrefix(input.Body, "/tz") {
-		input.Body = "/tz " + input.Body
+func doStuff() {
+	// Define the time format
+	const layout = "15:04:05"
+
+	// Define the time string
+	timeString := "14:00:00"
+
+	// Load the location
+	location, err := time.LoadLocation("Europe/Paris")
+	if err != nil {
+		fmt.Println("Error loading location:", err)
+		return
 	}
 
+	// Parse the time string in the specified location
+	parsedTime, err := time.ParseInLocation(layout, timeString, location)
+	if err != nil {
+		fmt.Println("Error parsing time:", err)
+		return
+	}
+
+	// Print the parsed time
+	pdk.Log(pdk.LogInfo, fmt.Sprintf("Parsed time: %v", parsedTime))
+}
+
+func handleMessage(input Message) (Message, error) {
+	doStuff()
 	if input.Type != "text" {
 		return Reply("I can only handle text messages"), nil
 	}
 
-	// Split the input into parts
-	parts := strings.Fields(input.Body)
-	if len(parts) < 6 {
-		return Reply("invalid format: expected /tz [time] [AM/PM] [source timezone] in [destination timezone]"), nil
+	sourceTime, destTime, err := parseInput(input.Body)
+	if err != nil {
+		return Reply(err.Error()), nil
+	}
+
+	// Format the response
+	response := formatResponse(sourceTime, destTime)
+
+	return Reply(response), nil
+}
+
+func parseInput(input string) (time.Time, time.Time, error) {
+
+	input = strings.TrimSpace(input)
+
+	parts := strings.Fields(input)
+	if len(parts) < 4 {
+		examples := strings.Join([]string{
+			"14:20 GMT in CET",
+			"04:20 PM GMT in UTC-8",
+			"04:20 PM UTC+5 in GMT",
+		}, "\n")
+
+		return time.Time{}, time.Time{}, fmt.Errorf("invalid format: expected /tz [time] [AM/PM] [source timezone] in [destination timezone]. examples:\n%s", examples)
 	}
 
 	// Parse the input time
-	inputTime, err := time.Parse("3:04 PM", fmt.Sprintf("%s %s", parts[1], parts[2]))
-	if err != nil {
-		return Reply(fmt.Sprintf("invalid time format: %v", err)), nil
+	idx := 0
+	timePart := parts[idx]
+	idx++
+
+	if len(parts) >= 5 {
+		timePart += " " + parts[idx]
+
+		idx++
 	}
 
-	// Get source and destination time zones
-	sourceTimezone := strings.Join(parts[3:len(parts)-2], " ")
-	destTimezone := parts[len(parts)-1]
-
-	// Load source time zone
-	sourceLocation, err := loadLocation(sourceTimezone)
+	fromTZ, err := loadLocation(parts[idx])
 	if err != nil {
-		return Reply(fmt.Sprintf("invalid source timezone: %v", err)), nil
+		return time.Time{}, time.Time{}, fmt.Errorf("invalid source timezone: %v", err)
+	}
+	pdk.Log(pdk.LogInfo, fmt.Sprintf("fromTZ: %v", fromTZ))
+	idx++
+
+	var sourceTime time.Time
+	if len(parts) >= 5 {
+		sourceTime, err = time.ParseInLocation("3:04 PM", timePart, fromTZ)
+	} else {
+		sourceTime, err = time.ParseInLocation("15:04", timePart, fromTZ)
 	}
 
-	// Load destination time zone
-	destLocation, err := loadLocation(destTimezone)
+	s, _ := sourceTime.Zone()
+	pdk.Log(pdk.LogInfo, fmt.Sprintf("sourceTime: %v %v", sourceTime, s))
+
+	idx++ // skip "in"
+
+	toTZ, err := loadLocation(parts[idx])
 	if err != nil {
-		return Reply(fmt.Sprintf("invalid destination timezone: %v", err)), nil
+		return time.Time{}, time.Time{}, fmt.Errorf("invalid destination timezone: %v", err)
 	}
 
-	// Set the time in the source time zone
-	sourceTime := time.Date(time.Now().Year(), inputTime.Month(), inputTime.Day(), inputTime.Hour(), inputTime.Minute(), 0, 0, sourceLocation)
+	destTime := sourceTime.In(toTZ)
 
-	pdk.Log(pdk.LogInfo, fmt.Sprintf("sourceTime: %v", sourceTime))
-
-	// Convert to destination time zone
-	destTime := sourceTime.In(destLocation)
-
-	// Format the response
-	response := formatResponse(sourceTime, destTime, sourceTimezone, destTimezone)
-
-	return Reply(response), nil
+	return sourceTime, destTime, nil
 }
 
 func Reply(body string) Message {
@@ -103,7 +149,7 @@ func loadLocation(name string) (*time.Location, error) {
 	return time.LoadLocation(name)
 }
 
-func formatResponse(sourceTime, destTime time.Time, sourceTimezone, destTimezone string) string {
+func formatResponse(sourceTime, destTime time.Time) string {
 	// Initialize a message printer for formatting
 	p := message.NewPrinter(language.English)
 
