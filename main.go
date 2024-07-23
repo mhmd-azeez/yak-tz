@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	_ "time/tzdata"
@@ -30,9 +31,9 @@ func handleMessage(input Message) (Message, error) {
 }
 
 func parseInput(input string) (time.Time, time.Time, error) {
-	// black magic
-	var re = regexp.MustCompile(`(?:(\d{4}-\d{2}-\d{2})\s)?(\d{1,2}:\d{2})\s?(AM|PM)?\s?([A-Z]+[\+\-]?\d*)\s?in\s?([A-Z]+[\+\-]?\d*)`)
-	// Find the match
+	// black magic, don't touch
+	var re = regexp.MustCompile(`(?:([0-9]{4}-[0-9]{2}-[0-9]{2})[ 	])?([0-9]{1,2}:[0-9]{2})[ 	]?(AM|PM)?[ 	]?([A-Z]+[\+\-]?[0-9]*)[ 	]?[^ 	]+[ 	]?([A-Z]+[\+\-]?[0-9]*)`)
+
 	match := re.FindStringSubmatch(input)
 	if match == nil {
 		return time.Time{}, time.Time{}, fmt.Errorf("I couldn't understand the input")
@@ -60,15 +61,58 @@ func parseInput(input string) (time.Time, time.Time, error) {
 	// Parse the source time
 	sourceDateTime := strings.TrimSpace(sourceDate + " " + sourceTime + " " + strings.ToUpper(sourceMeridian))
 
-	parsedTime, err := time.ParseInLocation("2006-01-02 3:04 PM", sourceDateTime, sourceLocation)
+	var parsedTime time.Time
+	if sourceMeridian == "" {
+		parsedTime, err = time.ParseInLocation("2006-01-02 15:04", sourceDateTime, sourceLocation)
+	} else {
+		parsedTime, err = time.ParseInLocation("2006-01-02 3:04 PM", sourceDateTime, sourceLocation)
+	}
+
 	if err != nil {
 		return time.Time{}, time.Time{}, fmt.Errorf("I couldn't understand the source time: %s", sourceDateTime)
 	}
 
-	// Convert the time to the destination timezone
 	destTime := parsedTime.In(destLocation)
 
 	return parsedTime, destTime, nil
+}
+
+// parseOffset converts a string like "UTC+4" or "UTC-5" to a *time.Location
+func parseOffset(offsetStr string) (*time.Location, error) {
+	// Remove "UTC" prefix if present
+	if strings.HasPrefix(offsetStr, "UTC") {
+		offsetStr = strings.TrimPrefix(offsetStr, "UTC")
+	}
+
+	// Parse the offset
+	offsetStr = strings.TrimSpace(offsetStr)
+	sign := 1
+	if strings.HasPrefix(offsetStr, "-") {
+		sign = -1
+		offsetStr = strings.TrimPrefix(offsetStr, "-")
+	} else if strings.HasPrefix(offsetStr, "+") {
+		offsetStr = strings.TrimPrefix(offsetStr, "+")
+	}
+
+	// Parse the offset hours and minutes
+	offsetParts := strings.Split(offsetStr, ":")
+	hours, err := strconv.Atoi(offsetParts[0])
+	if err != nil {
+		return nil, fmt.Errorf("invalid hours in offset: %v", err)
+	}
+	minutes := 0
+	if len(offsetParts) > 1 {
+		minutes, err = strconv.Atoi(offsetParts[1])
+		if err != nil {
+			return nil, fmt.Errorf("invalid minutes in offset: %v", err)
+		}
+	}
+
+	// Calculate total offset in seconds
+	offsetSeconds := (hours*3600 + minutes*60) * sign
+
+	// Create and return the fixed zone
+	return time.FixedZone(fmt.Sprintf("UTC%+d", offsetSeconds/3600), offsetSeconds), nil
 }
 
 func Reply(body string) Message {
@@ -102,6 +146,10 @@ func loadLocation(name string) (*time.Location, error) {
 	}
 
 	name = strings.TrimSpace(name)
+
+	if strings.HasPrefix(name, "UTC") {
+		return parseOffset(name)
+	}
 
 	if ianaName, ok := commonAbbreviations[strings.ToUpper(name)]; ok {
 		name = ianaName
