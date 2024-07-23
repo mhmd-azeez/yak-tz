@@ -4,42 +4,16 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 	_ "time/tzdata"
 
-	"github.com/extism/go-pdk"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 )
 
-func doStuff() {
-	// Define the time format
-	const layout = "15:04:05"
-
-	// Define the time string
-	timeString := "14:00:00"
-
-	// Load the location
-	location, err := time.LoadLocation("Europe/Paris")
-	if err != nil {
-		fmt.Println("Error loading location:", err)
-		return
-	}
-
-	// Parse the time string in the specified location
-	parsedTime, err := time.ParseInLocation(layout, timeString, location)
-	if err != nil {
-		fmt.Println("Error parsing time:", err)
-		return
-	}
-
-	// Print the parsed time
-	pdk.Log(pdk.LogInfo, fmt.Sprintf("Parsed time: %v", parsedTime))
-}
-
 func handleMessage(input Message) (Message, error) {
-	doStuff()
 	if input.Type != "text" {
 		return Reply("I can only handle text messages"), nil
 	}
@@ -56,58 +30,45 @@ func handleMessage(input Message) (Message, error) {
 }
 
 func parseInput(input string) (time.Time, time.Time, error) {
-
-	input = strings.TrimSpace(input)
-
-	parts := strings.Fields(input)
-	if len(parts) < 4 {
-		examples := strings.Join([]string{
-			"14:20 GMT in CET",
-			"04:20 PM GMT in UTC-8",
-			"04:20 PM UTC+5 in GMT",
-		}, "\n")
-
-		return time.Time{}, time.Time{}, fmt.Errorf("invalid format: expected /tz [time] [AM/PM] [source timezone] in [destination timezone]. examples:\n%s", examples)
+	// black magic
+	var re = regexp.MustCompile(`(?:(\d{4}-\d{2}-\d{2})\s)?(\d{1,2}:\d{2})\s?(AM|PM)?\s?([A-Z]+[\+\-]?\d*)\s?in\s?([A-Z]+[\+\-]?\d*)`)
+	// Find the match
+	match := re.FindStringSubmatch(input)
+	if match == nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("I couldn't understand the input")
 	}
 
-	// Parse the input time
-	idx := 0
-	timePart := parts[idx]
-	idx++
-
-	if len(parts) >= 5 {
-		timePart += " " + parts[idx]
-
-		idx++
+	sourceDate := match[1]
+	if sourceDate == "" {
+		sourceDate = time.Now().Format("2006-01-02")
 	}
 
-	fromTZ, err := loadLocation(parts[idx])
+	sourceTime := match[2]
+	sourceMeridian := match[3]
+	sourceTZ := match[4]
+	sourceLocation, err := loadLocation(sourceTZ)
 	if err != nil {
-		return time.Time{}, time.Time{}, fmt.Errorf("invalid source timezone: %v", err)
-	}
-	pdk.Log(pdk.LogInfo, fmt.Sprintf("fromTZ: %v", fromTZ))
-	idx++
-
-	var sourceTime time.Time
-	if len(parts) >= 5 {
-		sourceTime, err = time.ParseInLocation("3:04 PM", timePart, fromTZ)
-	} else {
-		sourceTime, err = time.ParseInLocation("15:04", timePart, fromTZ)
+		return time.Time{}, time.Time{}, fmt.Errorf("I couldn't understand the source timezone: %s", sourceTZ)
 	}
 
-	s, _ := sourceTime.Zone()
-	pdk.Log(pdk.LogInfo, fmt.Sprintf("sourceTime: %v %v", sourceTime, s))
-
-	idx++ // skip "in"
-
-	toTZ, err := loadLocation(parts[idx])
+	destTZ := match[5]
+	destLocation, err := loadLocation(destTZ)
 	if err != nil {
-		return time.Time{}, time.Time{}, fmt.Errorf("invalid destination timezone: %v", err)
+		return time.Time{}, time.Time{}, fmt.Errorf("I couldn't understand the destination timezone: %s", destTZ)
 	}
 
-	destTime := sourceTime.In(toTZ)
+	// Parse the source time
+	sourceDateTime := strings.TrimSpace(sourceDate + " " + sourceTime + " " + strings.ToUpper(sourceMeridian))
 
-	return sourceTime, destTime, nil
+	parsedTime, err := time.ParseInLocation("2006-01-02 3:04 PM", sourceDateTime, sourceLocation)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("I couldn't understand the source time: %s", sourceDateTime)
+	}
+
+	// Convert the time to the destination timezone
+	destTime := parsedTime.In(destLocation)
+
+	return parsedTime, destTime, nil
 }
 
 func Reply(body string) Message {
