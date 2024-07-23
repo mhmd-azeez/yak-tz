@@ -143,6 +143,7 @@ func loadLocation(name string) (*time.Location, error) {
 		"JST":  "Asia/Tokyo",
 		"AEST": "Australia/Sydney",
 		"AEDT": "Australia/Sydney",
+		"AST":  "Asia/Baghdad",
 	}
 
 	name = strings.TrimSpace(name)
@@ -168,10 +169,10 @@ func formatResponse(sourceTime, destTime time.Time) string {
 
 	// Format the response
 	return p.Sprintf("%s %s (UTC%s) is <b>%s</b> in %s (UTC%s)",
-		sourceTime.Format("3:04 PM"),
+		sourceTime.Format("2006-01-02 3:04 PM"),
 		s,
 		formatOffset(sourceOffset),
-		destTime.Format("3:04 PM"),
+		destTime.Format("2006-01-02 3:04 PM"),
 		d,
 		formatOffset(destOffset))
 }
