@@ -9,6 +9,10 @@ Can convert date/time to any timezone you want. Very helpful for remote-first te
 /tz 2024-08-01 2:00 PM GMT => CEST
 ```
 
+```
+/tz convert 02:30 CET to GMT please
+```
+
 ![image](https://github.com/user-attachments/assets/bb454fe2-c8d8-40e0-8a04-6c680844551a)
 
 
