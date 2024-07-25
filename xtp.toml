@@ -1,14 +1,14 @@
-app_id = "app_01j2bjr8xcfgqbnscn3eat8mr3"
+app_id = "app_01j2f0dkp2ftsav0a29mgebv6q"
 
 # This is where 'xtp plugin push' expects to find the wasm file after the build script has run.
 bin = "dist/plugin.wasm"
-extension_point_id = "ext_01j3fn9rf1edr9g8y8xdhv9gj6"
+extension_point_id = "ext_01j2f0wnyafykrdc6ve51jp0ac"
 name = "tz"
 
 [scripts]
 
   # xtp plugin build runs this script to generate the wasm file
-  build = "tinygo build -target wasi -o dist/plugin.wasm ."
+  build = "mkdir -p dist && tinygo build -target wasi -o dist/plugin.wasm ."
 
   # xtp plugin init runs this script to format the plugin code
   format = "go fmt"

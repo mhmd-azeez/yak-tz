@@ -16,18 +16,27 @@ import (
 
 func handleMessage(input Message) (Message, error) {
 	if input.Type != "text" {
-		return Reply("I can only handle text messages"), nil
+		return reply("I can only handle text messages"), nil
 	}
 
 	sourceTime, destTime, err := parseInput(input.Body)
 	if err != nil {
-		return Reply(err.Error()), nil
+		return reply(err.Error()), nil
 	}
 
 	// Format the response
 	response := formatResponse(sourceTime, destTime)
 
-	return Reply(response), nil
+	return reply(response), nil
+}
+
+func reply(body string) Message {
+	nick := "bot"
+	return Message{
+		Body: body,
+		Type: MessageTypeHtml,
+		Nick: &nick,
+	}
 }
 
 func parseInput(input string) (time.Time, time.Time, error) {
@@ -113,15 +122,6 @@ func parseOffset(offsetStr string) (*time.Location, error) {
 
 	// Create and return the fixed zone
 	return time.FixedZone(fmt.Sprintf("UTC%+d", offsetSeconds/3600), offsetSeconds), nil
-}
-
-func Reply(body string) Message {
-	nick := "bot"
-	return Message{
-		Body: body,
-		Type: string(Html),
-		Nick: &nick,
-	}
 }
 
 func loadLocation(name string) (*time.Location, error) {

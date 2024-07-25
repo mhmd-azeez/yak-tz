@@ -2,12 +2,15 @@
 package main
 
 import (
+	"errors"
 	pdk "github.com/extism/go-pdk"
 )
 
 //export handleMessage
 func _handleMessage() int32 {
 	var err error
+	_ = err
+	pdk.Log(pdk.LogDebug, "handleMessage: getting JSON input")
 	var input Message
 	err = pdk.InputJSON(&input)
 	if err != nil {
@@ -15,18 +18,21 @@ func _handleMessage() int32 {
 		return -1
 	}
 
+	pdk.Log(pdk.LogDebug, "handleMessage: calling implementation function")
 	output, err := handleMessage(input)
 	if err != nil {
 		pdk.SetError(err)
 		return -1
 	}
 
+	pdk.Log(pdk.LogDebug, "handleMessage: setting JSON output")
 	err = pdk.OutputJSON(output)
 	if err != nil {
 		pdk.SetError(err)
 		return -1
 	}
 
+	pdk.Log(pdk.LogDebug, "handleMessage: returning")
 	return 0
 }
 
@@ -34,17 +40,43 @@ func _handleMessage() int32 {
 type MessageType string
 
 const (
-	Html MessageType = "html"
-	Text MessageType = "text"
-	Image MessageType = "image"
+	MessageTypeHtml  MessageType = "html"
+	MessageTypeText  MessageType = "text"
+	MessageTypeImage MessageType = "image"
 )
+
+func (v MessageType) String() string {
+	switch v {
+	case MessageTypeHtml:
+		return `html`
+	case MessageTypeText:
+		return `text`
+	case MessageTypeImage:
+		return `image`
+	default:
+		return ""
+	}
+}
+
+func stringToMessageType(s string) (MessageType, error) {
+	switch s {
+	case `html`:
+		return MessageTypeHtml, nil
+	case `text`:
+		return MessageTypeText, nil
+	case `image`:
+		return MessageTypeImage, nil
+	default:
+		return MessageType(""), errors.New("unable to convert string to MessageType")
+	}
+}
 
 // A message from the system
 type Message struct {
 	// The message body. Depends on the type
 	Body string `json:"body"`
 	// Tells the application how to interpret this message.
-	Type string `json:"type"`
+	Type MessageType `json:"type"`
 	// The nickname of the originator of the message
 	Nick *string `json:"nick"`
 }
